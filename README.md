@@ -1,27 +1,48 @@
-# Microsoft Spotlight for GNU/Linux distros
-Just set your display manager's login greeter's background to use the image set in this script's WALLPAPER variable (or vice versa) and put the script in the startup :)
+# Spotlight Wallpaper for GNU/Linux
 
-E.g.: For lightdm you would have to edit /etc/lightdm/lightdm-gtk-greeter.conf to use /opt/login-background.jpg
+A small, dependency-light command that downloads a Microsoft Spotlight
+landscape image and atomically updates a wallpaper file.
 
-## About the MS Spotlight API
+## Requirements
 
-The Spotlight API is located on the following endpoint:
+- a POSIX shell;
+- `curl`;
+- Python 3 (standard library only);
+- optionally, `file` for image-type validation.
 
-`https://arc.msn.com/v3/Delivery/Cache?pid=209567&fmt=json&rafb=0&ua=WindowsShellClient%2F0&disphorzres=9999&dispvertres=9999&lo=80217&pl=en-US&lc=en-US&ctry=us&time=2017-12-31T23:59:59Z`
+## Usage
 
-Where the expected arguments are:
- - `pid` : Purpose currently unknown
- - `fmt` : Output format, e.g. `json`
- - `rafb` : Purpose currently unknown
- - `ua` : Client user agent string
- - `disphorzres`: Screen width in pixels
- - `dispvertres`: Screen height in pixels
- - `lo` : Purpose currently uknown
- - `pl` : Locale, e.g. `en-US`
- - `lc` : Language, e.g. `en-US`
- - `ctry` : Country, e.g. `us`
- - `time` : Time, e.g. `2017-12-31T23:59:59Z`
+```sh
+./bin/spotlight-wallpaper --output "$HOME/.local/share/backgrounds/spotlight.jpg"
+```
 
-The JSON response contains details about 6-7 images including image url, title, sha256, ads, etc.
+The output, locale and country can also be set with `SPOTLIGHT_OUTPUT`,
+`SPOTLIGHT_LOCALE`, and `SPOTLIGHT_COUNTRY`.
 
-Spotlight API URL was originally found in this [file](https://github.com/KoalaBR/spotlight/blob/3164a43684dcadb751ce9a38db59f29453acf2fe/spotlightprovider.cpp#L17), thanks to the author for their findings!
+The script uses timeouts, rejects failed HTTP responses, checks that the
+download is non-empty, validates its media type when `file` is available, and
+only then replaces the configured wallpaper.
+
+Use a systemd user timer, cron, or your desktop's startup facility to run it
+periodically. Point the desktop or display manager at the same output path.
+
+## Test
+
+```sh
+python3 tests/test_extract_url.py
+```
+
+The test is offline and uses a synthetic API fixture.
+
+## History and attribution
+
+The Microsoft endpoint was originally identified through KoalaBR's Spotlight
+client, as documented in the earlier repository.
+
+Microsoft Spotlight is a Microsoft service and can change or disappear without
+notice. Images and their associated metadata remain subject to their respective
+rights; this repository licenses only its own code.
+
+## Licence
+
+MIT. See `LICENSE`.

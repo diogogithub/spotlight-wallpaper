@@ -1,0 +1,12 @@
+{
+  "batchrsp": {
+    "items": [
+      {
+        "landscapeImage": {
+          "url": "https://example.invalid/images/landscape.jpg"
+        },
+        "thumbnail": "https://example.invalid/images/thumb.jpg"
+      }
+    ]
+  }
+}
