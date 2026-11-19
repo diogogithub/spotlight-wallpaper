@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the best landscape-image URL from a Spotlight JSON response."""
-
+"""Extract landscape-image URLs from Spotlight JSON, including nested item strings."""
 from __future__ import annotations
 
 import json
@@ -8,15 +7,24 @@ import sys
 from collections.abc import Iterable
 
 
-def strings(value: object, path: tuple[str, ...] = ()) -> Iterable[tuple[tuple[str, ...], str]]:
+def strings(value: object, path: tuple[str, ...] = (), depth: int = 0) -> Iterable[tuple[tuple[str, ...], str]]:
     if isinstance(value, dict):
         for key, child in value.items():
-            yield from strings(child, (*path, str(key).lower()))
+            yield from strings(child, (*path, str(key).lower()), depth)
     elif isinstance(value, list):
         for child in value:
-            yield from strings(child, path)
+            yield from strings(child, path, depth)
     elif isinstance(value, str):
-        yield path, value.replace("\\/", "/")
+        normalized = value.replace("\\/", "/")
+        if depth < 3 and normalized.lstrip().startswith(("{", "[")):
+            try:
+                nested = json.loads(normalized)
+            except json.JSONDecodeError:
+                pass
+            else:
+                yield from strings(nested, path, depth + 1)
+                return
+        yield path, normalized
 
 
 def score(path: tuple[str, ...], value: str) -> int:
@@ -26,15 +34,17 @@ def score(path: tuple[str, ...], value: str) -> int:
     joined = ".".join(path)
     points = 0
     if "landscape" in joined or "landscape" in lowered:
-        points += 8
+        points += 12
     if "image" in joined or "image" in lowered:
         points += 5
-    if "url" in joined:
+    if "asset" in joined or "url" in joined or joined.endswith(".u"):
         points += 3
     if "binary" in lowered:
         points += 3
     if any(lowered.split("?", 1)[0].endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
         points += 4
+    if "thumbnail" in joined or "portrait" in joined:
+        points -= 20
     return points
 
 
@@ -44,9 +54,8 @@ def main() -> int:
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         print(f"Invalid Spotlight JSON: {exc}", file=sys.stderr)
         return 2
-
-    candidates = [(score(path, value), value) for path, value in strings(payload)]
-    candidates = [candidate for candidate in candidates if candidate[0] >= 5]
+    candidates = [(score(path, url), url) for path, url in strings(payload)]
+    candidates = [item for item in candidates if item[0] >= 5]
     if not candidates:
         return 1
     candidates.sort(key=lambda item: item[0], reverse=True)

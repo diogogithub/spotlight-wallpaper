@@ -1,48 +1,29 @@
 # Spotlight Wallpaper for GNU/Linux
 
-A small, dependency-light command that downloads a Microsoft Spotlight
-landscape image and atomically updates a wallpaper file.
-
-## Requirements
-
-- a POSIX shell;
-- `curl`;
-- Python 3 (standard library only);
-- optionally, `file` for image-type validation.
+Download a Microsoft Spotlight landscape image to a stable local file. The Python 3 client uses only the standard library, rejects invalid or undersized images, and replaces the previous wallpaper atomically. If Microsoft does not supply a valid image, the previous file is untouched.
 
 ## Usage
 
 ```sh
-./bin/spotlight-wallpaper --output "$HOME/.local/share/backgrounds/spotlight.jpg"
+./bin/spotlight-wallpaper --output "$HOME/.local/share/backgrounds/spotlight.jpg" \
+  --width 3440 --height 1440 --min-width 1600 --min-height 900
 ```
 
-The output, locale and country can also be set with `SPOTLIGHT_OUTPUT`,
-`SPOTLIGHT_LOCALE`, and `SPOTLIGHT_COUNTRY`.
+Resolution arguments request an appropriately sized image from Microsoft and define the minimum acceptable image. The service can still return a 16:9 picture for an ultrawide monitor. Your desktop wallpaper setter controls whether to crop it or show borders.
 
-The script uses timeouts, rejects failed HTTP responses, checks that the
-download is non-empty, validates its media type when `file` is available, and
-only then replaces the configured wallpaper.
+Environment overrides: `SPOTLIGHT_OUTPUT`, `SPOTLIGHT_WIDTH`, `SPOTLIGHT_HEIGHT`, `SPOTLIGHT_MIN_WIDTH`, `SPOTLIGHT_MIN_HEIGHT`, `SPOTLIGHT_LOCALE` and `SPOTLIGHT_COUNTRY`.
 
-Use a systemd user timer, cron, or your desktop's startup facility to run it
-periodically. Point the desktop or display manager at the same output path.
+This client only downloads images; it does not change the active wallpaper. Use a compositor-aware wallpaper setter such as `feh --bg-fill` on X11, and a systemd user timer for periodic updates.
 
 ## Test
 
 ```sh
 python3 tests/test_extract_url.py
+python3 tests/test_cli.py
 ```
 
-The test is offline and uses a synthetic API fixture.
+These tests work offline. Microsoft endpoints and image availability may change.
 
-## History and attribution
+## License
 
-The Microsoft endpoint was originally identified through KoalaBR's Spotlight
-client, as documented in the earlier repository.
-
-Microsoft Spotlight is a Microsoft service and can change or disappear without
-notice. Images and their associated metadata remain subject to their respective
-rights; this repository licenses only its own code.
-
-## Licence
-
-MIT. See `LICENSE`.
+MIT for this project's code. Spotlight images belong to their respective rights holders.
