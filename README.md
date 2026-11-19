@@ -13,6 +13,8 @@ Resolution arguments request an appropriately sized image from Microsoft and def
 
 Environment overrides: `SPOTLIGHT_OUTPUT`, `SPOTLIGHT_WIDTH`, `SPOTLIGHT_HEIGHT`, `SPOTLIGHT_MIN_WIDTH`, `SPOTLIGHT_MIN_HEIGHT`, `SPOTLIGHT_LOCALE` and `SPOTLIGHT_COUNTRY`.
 
+The client tries Microsoft's documented v3 `Placement` API, an alternative Microsoft host and finally the legacy `Cache` endpoint. The service can return a "no eligible content" response depending on Microsoft availability and region; these errors are reported, and the last valid file is always preserved. API v3 returns images up to approximately 1080p even if a larger desktop resolution was requested. **There is no silent Bing substitution.**
+
 This client only downloads images; it does not change the active wallpaper. Use a compositor-aware wallpaper setter such as `feh --bg-fill` on X11, and a systemd user timer for periodic updates.
 
 ## Test

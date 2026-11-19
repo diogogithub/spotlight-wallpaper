@@ -8,6 +8,7 @@ import os
 import struct
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -75,43 +76,81 @@ def main() -> int:
     args = parser.parse_args()
     if min(args.width, args.height, args.min_width, args.min_height) <= 0:
         parser.error("dimensions must be positive")
+    # Windows 10 Spotlight v3: Placement is the documented delivery endpoint.
+    # Cache is kept as a fallback for regions in which it still supplies images.
     params = {
-        "pid": "209567", "fmt": "json", "rafb": "0", "ua": "WindowsShellClient/0",
+        "pid": "209567", "fmt": "json", "rafb": "0",
+        "ua": "WindowsShellClient/0", "cdm": "1", "lo": "80217",
         "disphorzres": str(args.width), "dispvertres": str(args.height),
-        "pl": args.locale, "lc": args.locale, "ctry": args.country,
+        "pl": args.locale, "lc": args.locale,
+        "ctry": args.country.lower(),
         "time": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    api = "https://arc.msn.com/v3/Delivery/Cache?" + urllib.parse.urlencode(params)
+    query = urllib.parse.urlencode(params)
+    endpoints = [
+        ("Placement", "https://arc.msn.com/v3/Delivery/Placement?" + query),
+        ("Placement (alternative host)", "https://fd.api.iris.microsoft.com/v3/Delivery/Placement?" + query),
+        ("Cache", "https://arc.msn.com/v3/Delivery/Cache?" + query),
+    ]
+    errors = []
     try:
         import json
-        payload = json.loads(fetch(api, 3_000_000))
-        candidates = sorted(
-            ((score(path, url), url) for path, url in strings(payload)),
-            key=lambda item: item[0], reverse=True
+        for source, endpoint in endpoints:
+            try:
+                payload = json.loads(fetch(endpoint, 3_000_000))
+            except (OSError, ValueError, urllib.error.URLError) as exc:
+                errors.append(f"{source}: {exc}")
+                continue
+
+            candidates = sorted(
+                ((score(path, url), url) for path, url in strings(payload)),
+                key=lambda item: item[0], reverse=True,
+            )
+            urls = list(dict.fromkeys(
+                url for rating, url in candidates
+                if rating >= 5 and url.startswith("https://")
+            ))
+            if not urls:
+                batch = payload.get("batchrsp", {}) if isinstance(payload, dict) else {}
+                server_errors = batch.get("errors", []) if isinstance(batch, dict) else []
+                details = str(server_errors)[:200] if server_errors else "no landscape image URLs"
+                errors.append(f"{source}: {details}")
+                continue
+
+            for url in urls[:5]:
+                try:
+                    data = fetch(url, 30_000_000)
+                    width, height = image_size(data)
+                    if width < args.min_width or height < args.min_height:
+                        raise ValueError(
+                            f"image {width}x{height} below minimum "
+                            f"{args.min_width}x{args.min_height}"
+                        )
+                    if width > 16000 or height > 16000 or width * height > 100_000_000:
+                        raise ValueError("implausible image dimensions")
+                    output = Path(args.output).expanduser()
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    temp_path = None
+                    try:
+                        with tempfile.NamedTemporaryFile(
+                            prefix=".spotlight.", dir=output.parent, delete=False,
+                        ) as temp:
+                            temp_path = Path(temp.name)
+                            temp.write(data)
+                        os.chmod(temp_path, 0o644)
+                        os.replace(temp_path, output)
+                    finally:
+                        if temp_path is not None:
+                            temp_path.unlink(missing_ok=True)
+                    print(f"{output} ({width}x{height}, {source})")
+                    return 0
+                except (OSError, ValueError, urllib.error.URLError) as exc:
+                    errors.append(f"{source} image: {exc}")
+
+        raise ValueError(
+            "No valid Microsoft Spotlight wallpaper from the available endpoints. "
+            + "; ".join(errors)
         )
-        urls = [url for rating, url in candidates if rating >= 5 and url.startswith("https://")]
-        if not urls:
-            raise ValueError("Spotlight did not return a landscape image")
-        data = fetch(urls[0], 30_000_000)
-        width, height = image_size(data)
-        if width < args.min_width or height < args.min_height:
-            raise ValueError(f"Image {width}x{height} is below {args.min_width}x{args.min_height}")
-        if width > 16000 or height > 16000 or width * height > 100_000_000:
-            raise ValueError("Implausible image dimensions")
-        output = Path(args.output).expanduser()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(prefix=".spotlight.", dir=output.parent, delete=False) as temp:
-                temp_path = Path(temp.name)
-                temp.write(data)
-            os.chmod(temp_path, 0o644)
-            os.replace(temp_path, output)
-        finally:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-        print(f"{output} ({width}x{height})")
-        return 0
     except (OSError, ValueError, urllib.error.URLError) as exc:
         print(f"spotlight-wallpaper: {exc}", file=sys.stderr)
         return 1

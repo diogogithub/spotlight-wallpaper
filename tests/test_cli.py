@@ -52,6 +52,34 @@ def main() -> None:
                 assert module.main() == 0
         assert target.read_bytes() == png
 
+        # Placement may be available while Cache returns "no eligible content".
+        requested = []
+        def placement_only(url: str, _limit: int) -> bytes:
+            requested.append(url)
+            if "/v3/Delivery/Placement" in url and "arc.msn.com" in url:
+                return json.dumps(payload).encode()
+            if url.startswith("https://example.invalid/"):
+                return png
+            raise ValueError("no content")
+        with patch.object(module, "fetch", side_effect=placement_only), patch.object(sys, "argv", argv):
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert module.main() == 0
+        assert any("/v3/Delivery/Placement" in url for url in requested)
+
+        # A no-content Placement response should fall back to Cache.
+        cache_calls = []
+        def cache_only(url: str, _limit: int) -> bytes:
+            cache_calls.append(url)
+            if "/v3/Delivery/Placement" in url:
+                return b'{"batchrsp":{"errors":[{"code":2040,"msg":"No eligible content"}]}}'
+            if "/v3/Delivery/Cache" in url:
+                return json.dumps(payload).encode()
+            return png
+        with patch.object(module, "fetch", side_effect=cache_only), patch.object(sys, "argv", argv):
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert module.main() == 0
+        assert any("/v3/Delivery/Cache" in url for url in cache_calls)
+
         with patch.object(module, "fetch", side_effect=lambda url, lim: b"<html>broken</html>"), patch.object(sys, "argv", argv):
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 assert module.main() == 1
