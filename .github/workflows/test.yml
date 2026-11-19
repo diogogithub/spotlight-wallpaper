@@ -1,0 +1,18 @@
+name: test
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Spotlight parser and image handling
+        run: |
+          python3 tests/test_extract_url.py
+          python3 tests/test_cli.py
+          python3 -m compileall -q bin lib tests
